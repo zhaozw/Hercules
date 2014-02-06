@@ -5768,10 +5768,10 @@ BUILDIN(copyarray)
 	count = script_getnum(st, 4);
 	if( count > SCRIPT_MAX_ARRAYSIZE - idx1 )
 		count = SCRIPT_MAX_ARRAYSIZE - idx1;
-	if( count <= 0 || (id1 == id2 && idx1 == idx2) )
+	if( count <= 0 || (idx1 == idx2 && is_same_reference(data1, data2)) )
 		return true;// nothing to copy
 
-	if( id1 == id2 && idx1 > idx2 )
+	if( is_same_reference(data1, data2) && idx1 > idx2 )
 	{// destination might be overlapping the source - copy in reverse order
 		for( i = count - 1; i >= 0; --i )
 		{
