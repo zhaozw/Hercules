@@ -5,6 +5,7 @@
 #ifndef _MAP_MAPREG_H_
 #define _MAP_MAPREG_H_
 
+#include "script.h"
 #include "../common/cbasetypes.h"
 #include "../common/db.h"
 
@@ -19,9 +20,7 @@ struct mapreg_save {
 };
 
 struct mapreg_interface {
-	DBMap *db; // int var_id -> int value
-	/* */
-	DBMap *array_db;
+	struct reg_db regs;
 	/* */
 	bool skip_insert;
 	/* */

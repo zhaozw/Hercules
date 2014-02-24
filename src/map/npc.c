@@ -3341,7 +3341,7 @@ const char* npc_parse_function(char* w1, char* w2, char* w3, char* w4, const cha
 	{
 		struct script_code *oldscript = (struct script_code*)DB->data2ptr(&old_data);
 		ShowWarning("npc_parse_function: Overwriting user function [%s] in file '%s', line '%d'.\n", w3, filepath, strline(buffer,start-buffer));
-		script->free_vars(oldscript->script_vars);
+		script->free_vars(oldscript->local.vars);
 		aFree(oldscript->script_buf);
 		aFree(oldscript);
 	}

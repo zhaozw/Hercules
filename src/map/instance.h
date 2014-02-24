@@ -5,6 +5,10 @@
 #ifndef _MAP_INSTANCE_H_
 #define _MAP_INSTANCE_H_
 
+#include "script.h" // struct reg_db
+#include "../common/mmo.h" // struct point
+struct block_list;
+
 #define INSTANCE_NAME_LENGTH (60+1)
 
 typedef enum instance_state {
@@ -33,8 +37,7 @@ struct instance_data {
 	unsigned short num_map;
 	unsigned short users;
 
-	struct DBMap *vars; // Instance Variable for scripts
-	struct DBMap *array_db ;
+	struct reg_db regs; // Instance Variable for scripts
 	
 	int progress_timer;
 	unsigned int progress_timeout;
