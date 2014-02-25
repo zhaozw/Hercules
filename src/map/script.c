@@ -2591,6 +2591,7 @@ struct script_data *get_val(struct script_state* st, struct script_data* data) {
 			}
 
 	}
+	data->ref = NULL;
 
 	return data;
 }
@@ -4905,7 +4906,7 @@ BUILDIN(callsub)
 		return false;
 	}
 
-	ref = (struct reg_db *)aCalloc(sizeof(struct reg_db), 2);
+	ref = (struct reg_db *)aCalloc(sizeof(struct reg_db), 1);
 	ref[0].vars = st->stack->scope.vars;
 	if (!st->stack->scope.arrays)
 		st->stack->scope.arrays = idb_alloc(DB_OPT_BASE); // TODO: Can this happen? when?
@@ -4991,6 +4992,8 @@ BUILDIN(return)
 			{// scope variable
 				if( !data->ref || data->ref->vars == st->stack->scope.vars )
 					script->get_val(st, data);// current scope, convert to value
+				if( data->ref && data->ref->vars == st->stack->stack_data[st->stack->defsp-1].u.ri->scope.vars )
+					data->ref = NULL; // Reference to the parent scope, remove reference pointer
 			}
 			else if( name[0] == '.' && !data->ref )
 			{// script variable, link to current script
