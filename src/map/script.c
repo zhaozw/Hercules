@@ -2461,9 +2461,9 @@ TBL_PC *script_rid2sd(struct script_state *st) {
 /**
  * Dereferences a variable/constant, replacing it with a copy of the value.
  *
- * @param st Script state
- * @param data Variable/constant
- * @return pointer to data, for convenience
+ * @param st[in]       script state.
+ * @param data[in,out] variable/constant.
+ * @return pointer to data, for convenience.
  */
 struct script_data *get_val(struct script_state* st, struct script_data* data) {
 	const char* name;
@@ -2596,8 +2596,16 @@ struct script_data *get_val(struct script_state* st, struct script_data* data) {
 	return data;
 }
 
-/// Retrieves the value of a reference identified by uid (variable, constant, param)
-/// The value is left in the top of the stack and needs to be removed manually.
+/**
+ * Retrieves the value of a reference identified by uid (variable, constant, param)
+ *
+ * The value is left in the top of the stack and needs to be removed manually.
+ *
+ * @param st[in]  script state.
+ * @param uid[in] reference identifier.
+ * @param ref[in] the container to look up the reference into.
+ * @return the retrieved value of the reference.
+ */
 void* get_val2(struct script_state* st, int64 uid, struct reg_db *ref) {
 	struct script_data* data;
 	script->push_val(st->stack, C_NAME, uid, ref);
@@ -2611,7 +2619,7 @@ void* get_val2(struct script_state* st, int64 uid, struct reg_db *ref) {
  **/
 void script_array_ensure_zero(struct script_state *st, struct map_session_data *sd, int64 uid, struct reg_db *ref) {
 	const char *name = script->get_str(script_getvarid(uid));
-	struct DBMap *src = script->array_src(st, sd ? sd : st->rid ? map->id2sd(st->rid) : NULL, name, ref);
+	struct reg_db *src = script->array_src(st, sd ? sd : st->rid ? map->id2sd(st->rid) : NULL, name, ref);
 	struct script_array *sa = NULL;
 	bool insert = false;
 	
@@ -2631,8 +2639,8 @@ void script_array_ensure_zero(struct script_state *st, struct map_session_data *
 		}
 	}
 
-	if( src ) {
-		if( (sa = idb_get(src, script_getvarid(uid)) ) ) {
+	if( src && src->arrays ) {
+		if( (sa = idb_get(src->arrays, script_getvarid(uid)) ) ) {
 			unsigned int i;
 			
 			ARR_FIND(0, sa->size, i, sa->members[i] == 0);
@@ -2644,7 +2652,7 @@ void script_array_ensure_zero(struct script_state *st, struct map_session_data *
 			
 			script->array_add_member(sa,0);
 		} else if( insert ) {
-			script->array_update(&src,reference_uid(script_getvarid(uid), 0),false);
+			script->array_update(src,reference_uid(script_getvarid(uid), 0),false);
 		}
 	}
 }
@@ -2653,10 +2661,10 @@ void script_array_ensure_zero(struct script_state *st, struct map_session_data *
  **/
 unsigned int script_array_size(struct script_state *st, struct map_session_data *sd, const char *name, struct reg_db *ref) {
 	struct script_array *sa = NULL;
-	struct DBMap *src = script->array_src(st, sd, name, ref);
+	struct reg_db *src = script->array_src(st, sd, name, ref);
 	
-	if( src )
-		sa = idb_get(src, script->search_str(name));
+	if( src && src->arrays )
+		sa = idb_get(src->arrays, script->search_str(name));
 	
 	return sa ? sa->size : 0;
 }
@@ -2665,15 +2673,15 @@ unsigned int script_array_size(struct script_state *st, struct map_session_data 
  **/
 unsigned int script_array_highest_key(struct script_state *st, struct map_session_data *sd, const char *name, struct reg_db *ref) {
 	struct script_array *sa = NULL;
-	struct DBMap *src = script->array_src(st, sd, name, ref);
+	struct reg_db *src = script->array_src(st, sd, name, ref);
 	
 	
-	if( src ) {
+	if( src && src->arrays ) {
 		int key = script->add_word(name);
 		
 		script->array_ensure_zero(st,sd,reference_uid(key, 0),ref);
 		
-		if( ( sa = idb_get(src, key) ) ) {
+		if( ( sa = idb_get(src->arrays, key) ) ) {
 			unsigned int i, highest_key = 0;
 			
 			for(i = 0; i < sa->size; i++) {
@@ -2696,9 +2704,9 @@ int script_free_array_db(DBKey key, DBData *data, va_list ap) {
 /**
  * Clears script_array and removes it from script->array_db
  **/
-void script_array_delete(struct DBMap *src, struct script_array *sa) {
+void script_array_delete(struct reg_db *src, struct script_array *sa) {
 	aFree(sa->members);
-	idb_remove(src, sa->id);
+	idb_remove(src->arrays, sa->id);
 	ers_free(script->array_ers, sa);
 }
 /**
@@ -2706,7 +2714,7 @@ void script_array_delete(struct DBMap *src, struct script_array *sa) {
  *
  * @param idx the index of the member in script_array struct list, not of the actual array member
  **/
-void script_array_remove_member(struct DBMap *src,struct script_array *sa, unsigned int idx) {
+void script_array_remove_member(struct reg_db *src, struct script_array *sa, unsigned int idx) {
 	unsigned int i, cursor;
 	
 	/* its the only member left, no need to do anything other than delete the array data */
@@ -2743,7 +2751,7 @@ void script_array_add_member(struct script_array *sa, unsigned int idx) {
  * Obtains the source of the array database for this type and scenario
  * Initializes such database when not yet initialised.
  **/
-struct DBMap *script_array_src(struct script_state *st, struct map_session_data *sd, const char *name, struct reg_db *ref) {
+struct reg_db *script_array_src(struct script_state *st, struct map_session_data *sd, const char *name, struct reg_db *ref) {
 	struct reg_db *src = NULL;
 	
 	switch( name[0] ) {
@@ -2772,25 +2780,30 @@ struct DBMap *script_array_src(struct script_state *st, struct map_session_data 
 	if( src ) {
 		if( !src->arrays )
 			src->arrays = idb_alloc(DB_OPT_BASE);
-		return src->arrays;
+		return src;
 	}
 	
 	return NULL;
 }
+
 /**
  * Processes a array member modification, and update data accordingly
+ *
+ * @param src[in,out] Variable source database. If the array database doesn't exist, it is created.
+ * @param num[in]     Variable ID
+ * @param empty[in]   Whether the modified member is empty (needs to be removed)
  **/
-void script_array_update(struct DBMap **src, int64 num, bool empty) {
+void script_array_update(struct reg_db *src, int64 num, bool empty) {
 	struct script_array *sa = NULL;
 	int id = script_getvarid(num);
 	unsigned int index = script_getvaridx(num);
 	
-	if( !*src ) {
-		*src = idb_alloc(DB_OPT_BASE);
+	if (!src->arrays) {
+		src->arrays = idb_alloc(DB_OPT_BASE);
 	} else {
-		sa = idb_get(*src, id);
+		sa = idb_get(src->arrays, id);
 	}
-			
+
 	if( sa ) {
 		unsigned int i;
 		
@@ -2804,7 +2817,7 @@ void script_array_update(struct DBMap **src, int64 num, bool empty) {
 		if( i != sa->size ) {
 			/* if empty, we gotta remove it */
 			if( empty ) {
-				script->array_remove_member(*src,sa,i);
+				script->array_remove_member(src, sa, i);
 			}
 		} else if( !empty ) { /* new entry */
 			script->array_add_member(sa,index);
@@ -2816,13 +2829,14 @@ void script_array_update(struct DBMap **src, int64 num, bool empty) {
 		sa->members = NULL;
 		sa->size = 0;
 		script->array_add_member(sa,index);
-		idb_put(*src, id, sa);
+		idb_put(src->arrays, id, sa);
 	}
 }
+
 /*==========================================
  * Stores the value of a script variable
  * Return value is 0 on fail, 1 on success.
- * TODO: return values are screwed up, have been for some time (reaad: years), e.g. some functions return 1 failure and success. 
+ * TODO: return values are screwed up, have been for some time (reaad: years), e.g. some functions return 1 failure and success.
  *------------------------------------------*/
 int set_reg(struct script_state* st, TBL_PC* sd, int64 num, const char* name, const void* value, struct reg_db *ref) {
 	char prefix = name[0];
@@ -2842,27 +2856,16 @@ int set_reg(struct script_state* st, TBL_PC* sd, int64 num, const char* name, co
 					pc_setaccountregstr(sd, num, str);
 			case '.':
 				{
-					struct DBMap* n;
-					n = (ref) ? ref->vars : (name[1] == '@') ? st->stack->scope.vars : st->script->local.vars;
+					struct reg_db *n = (ref) ? ref : (name[1] == '@') ? &st->stack->scope : &st->script->local;
 					if( n ) {
 						if (str[0])  {
-							i64db_put(n, num, aStrdup(str));
+							i64db_put(n->vars, num, aStrdup(str));
 							if( script_getvaridx(num) )
-								script->array_update(
-								                     (name[1] == '@') ?
-								                        &st->stack->scope.arrays :
-								                        &st->script->local.arrays,
-								                     num,
-								                     false);
+								script->array_update(n, num, false);
 						} else {
-							i64db_remove(n, num);
+							i64db_remove(n->vars, num);
 							if( script_getvaridx(num) )
-								script->array_update(
-								                     (name[1] == '@') ?
-								                         &st->stack->scope.arrays :
-								                         &st->script->local.arrays,
-								                     num,
-								                     true);
+								script->array_update(n, num, true);
 						}
 					}
 				}
@@ -2872,11 +2875,11 @@ int set_reg(struct script_state* st, TBL_PC* sd, int64 num, const char* name, co
 					if( str[0] ) {
 						i64db_put(instance->list[st->instance_id].regs.vars, num, aStrdup(str));
 						if( script_getvaridx(num) )
-							script->array_update(&instance->list[st->instance_id].regs.arrays, num, false);
+							script->array_update(&instance->list[st->instance_id].regs, num, false);
 					} else {
 						i64db_remove(instance->list[st->instance_id].regs.vars, num);
 						if( script_getvaridx(num) )
-							script->array_update(&instance->list[st->instance_id].regs.arrays, num, true);
+							script->array_update(&instance->list[st->instance_id].regs, num, true);
 					}
 				} else {
 					ShowError("script_set_reg: cannot write instance variable '%s', NPC not in a instance!\n", name);
@@ -2913,27 +2916,16 @@ int set_reg(struct script_state* st, TBL_PC* sd, int64 num, const char* name, co
 					pc_setaccountreg(sd, num, val);
 			case '.':
 				{
-					struct DBMap* n;
-					n = (ref) ? ref->vars : (name[1] == '@') ? st->stack->scope.vars : st->script->local.vars;
+					struct reg_db *n = (ref) ? ref : (name[1] == '@') ? &st->stack->scope : &st->script->local;
 					if( n ) {
 						if( val != 0 ) {
-							i64db_iput(n, num, val);
+							i64db_iput(n->vars, num, val);
 							if( script_getvaridx(num) )
-								script->array_update(
-								                     (name[1] == '@') ?
-								                         &st->stack->scope.arrays :
-								                         &st->script->local.arrays,
-								                     num,
-								                     false);
+								script->array_update(n, num, false);
 						} else {
-							i64db_remove(n, num);
+							i64db_remove(n->vars, num);
 							if( script_getvaridx(num) )
-								script->array_update(
-								                     (name[1] == '@') ?
-								                         &st->stack->scope.arrays :
-								                         &st->script->local.arrays,
-								                     num,
-								                     true);
+								script->array_update(n, num, true);
 						}
 					}
 				}
@@ -2943,11 +2935,11 @@ int set_reg(struct script_state* st, TBL_PC* sd, int64 num, const char* name, co
 					if( val != 0 ) {
 						i64db_iput(instance->list[st->instance_id].regs.vars, num, val);
 						if( script_getvaridx(num) )
-							script->array_update(&instance->list[st->instance_id].regs.arrays, num, false);
+							script->array_update(&instance->list[st->instance_id].regs, num, false);
 					} else {
 						i64db_remove(instance->list[st->instance_id].regs.vars, num);
 						if( script_getvaridx(num) )
-							script->array_update(&instance->list[st->instance_id].regs.arrays, num, true);
+							script->array_update(&instance->list[st->instance_id].regs, num, true);
 					}
 				} else {
 					ShowError("script_set_reg: cannot write instance variable '%s', NPC not in a instance!\n", name);
@@ -4086,7 +4078,7 @@ void script_add_autobonus(const char *autobonus)
 /// resets a temporary character array variable to given value
 void script_cleararray_pc(struct map_session_data* sd, const char* varname, void* value) {
 	struct script_array *sa = NULL;
-	struct DBMap *src = NULL;
+	struct reg_db *src = NULL;
 	unsigned int i, *list = NULL, size = 0;
 	int key;
 
@@ -4098,7 +4090,7 @@ void script_cleararray_pc(struct map_session_data* sd, const char* varname, void
 	if( value )
 		script->array_ensure_zero(NULL,sd,reference_uid(key,0),NULL);
 	
-	if( !(sa = idb_get(src, key)) ) /* non-existent array, nothing to empty */
+	if( !(sa = idb_get(src->arrays, key)) ) /* non-existent array, nothing to empty */
 		return;
 	
 	size = sa->size;
@@ -5839,7 +5831,7 @@ BUILDIN(deletearray)
 	int id;
 	TBL_PC *sd = NULL;
 	struct script_array *sa = NULL;
-	struct DBMap *src = NULL;
+	struct reg_db *src = NULL;
 	void *value;
 
 	data = script_getdata(st, 2);
@@ -5871,7 +5863,7 @@ BUILDIN(deletearray)
 	
 	script->array_ensure_zero(st,NULL,data->u.num,reference_getref(data));
 	
-	if ( !(sa = idb_get(src, id)) ) { /* non-existent array, nothing to empty */
+	if ( !(sa = idb_get(src->arrays, id)) ) { /* non-existent array, nothing to empty */
 		return true;// not a variable
 	}
 

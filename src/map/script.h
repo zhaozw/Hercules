@@ -680,10 +680,10 @@ struct script_interface {
 	/**
 	 * Array Handling
 	 **/
-	struct DBMap *(*array_src) (struct script_state *st, struct map_session_data *sd, const char *name, struct reg_db *ref);
-	void (*array_update) (struct DBMap **src, int64 num, bool empty);
-	void (*array_delete) (struct DBMap *src, struct script_array *sa);
-	void (*array_remove_member) (struct DBMap *src, struct script_array *sa, unsigned int idx);
+	struct reg_db *(*array_src) (struct script_state *st, struct map_session_data *sd, const char *name, struct reg_db *ref);
+	void (*array_update) (struct reg_db *src, int64 num, bool empty);
+	void (*array_delete) (struct reg_db *src, struct script_array *sa);
+	void (*array_remove_member) (struct reg_db *src, struct script_array *sa, unsigned int idx);
 	void (*array_add_member) (struct script_array *sa, unsigned int idx);
 	unsigned int (*array_size) (struct script_state *st, struct map_session_data *sd, const char *name, struct reg_db *ref);
 	unsigned int (*array_highest_key) (struct script_state *st, struct map_session_data *sd, const char *name, struct reg_db *ref);
